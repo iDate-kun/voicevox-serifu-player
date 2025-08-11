@@ -31,7 +31,8 @@
 ---
 ## 使い方
 - VOICEVOXを起動（DLされていない方は公式HPよりDLお願いします）
-- VOICEVOX APIを起動（http://localhost:50021/docs）
+- VOICEVOX APIを起動　↓
+- http://localhost:50021/docs
 - 本アプリを起動
 - 生成
 - mp3ファイルはoutputフォルダに生成されます。
