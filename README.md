@@ -30,11 +30,11 @@
 
 ---
 ## 使い方
-1.VOICEVOXを起動（DLされていない方は公式HPよりDLお願いします）
-2.VOICEVOX APIを起動（http://localhost:50021/docs）
-3.本アプリを起動
-4.生成
-5.mp3ファイルはoutputフォルダに生成されます。
+- VOICEVOXを起動（DLされていない方は公式HPよりDLお願いします）
+- VOICEVOX APIを起動（http://localhost:50021/docs）
+- 本アプリを起動
+- 生成
+- mp3ファイルはoutputフォルダに生成されます。
 
 
 ---
@@ -43,5 +43,7 @@ VOICEVOX　Version 0.24.2で起動確認
 
 ## キーワード
 VOICEVOX, 音声合成, TTS, 多キャラ読み上げ, ノベルゲーム, VTuber, フルボイス化, Electron, デスクトップアプリ
+
+## 補足情報
 
 本アプリはGemini CLIが9割。1割ChatGPTによって作成されました
