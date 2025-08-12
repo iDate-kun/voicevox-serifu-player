@@ -69,6 +69,7 @@ function App() {
   const [expandedSpeakers, setExpandedSpeakers] = useState(new Set());
   const [favorites, setFavorites] = useState(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const audioRef = useRef(null);
   const isInitialMount = useRef(true);
@@ -131,10 +132,11 @@ function App() {
       const tohokuMatch = !showTohokuOnly || char.isTohoku;
       const selectedMatch = !showSelectedOnly || char.styles.some(style => selectedStyles.has(style.id));
       const favoritesMatch = !showFavoritesOnly || favorites.has(char.speaker_uuid);
-      return genderMatch && tohokuMatch && selectedMatch && favoritesMatch;
+      const searchMatch = !searchQuery || char.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return genderMatch && tohokuMatch && selectedMatch && favoritesMatch && searchMatch;
     });
     setDisplayedCharacters(filtered);
-  }, [allCharacters, genderFilter, showTohokuOnly, showSelectedOnly, selectedStyles, favorites, showFavoritesOnly]);
+  }, [allCharacters, genderFilter, showTohokuOnly, showSelectedOnly, selectedStyles, favorites, showFavoritesOnly, searchQuery]);
 
 
   useEffect(() => {
@@ -226,7 +228,7 @@ function App() {
         }
         return `ID:${id}`;
     });
-    const safeFilename = text.substring(0, 30).replace(/[\/:*?"<>|]/g, '_') || 'output';
+    const safeFilename = text.substring(0, 30).replace(/[\\/:*?"<>|]/g, '_') || 'output';
 
     try {
       const outputPath = await window.electronAPI.generateAudio({
@@ -329,7 +331,7 @@ function App() {
 
   return (
     <div className="container-fluid vh-100 d-flex flex-column p-3">
-      <header className="mb-3"><h1>Voicevoxセリフプレイヤー</h1></header>
+      <header className="mb-3 d-flex justify-content-between align-items-baseline"><h1>Voicevoxセリフプレイヤー</h1><small className='text-muted'>このアプリは全画面でのご利用を推奨します。</small></header>
       <div className="row flex-grow-1 gx-3">
         <div className="col-md-4 d-flex flex-column">
           <div className="card flex-grow-1"><div className="card-body d-flex flex-column">
@@ -397,6 +399,15 @@ function App() {
                   <label className="form-check-label" htmlFor="style-mode-switch">スタイル選択</label>
                 </div>
               </div>
+            </div>
+            <div className="mb-3">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="キャラクター名で検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <div className="overflow-auto flex-grow-1">
               {displayedCharacters.length > 0 ? renderCharacterList() : (<p>{allCharacters.length > 0 ? 'フィルターに一致するキャラクターがいません。' : status}</p>)}
