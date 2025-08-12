@@ -1,0 +1,205 @@
+/* --- Susan Kare Inspired Theme --- */
+
+/* --- Global Variables & Font --- */
+:root {
+  --bg-color: #ffffff;
+  --panel-bg: #ffffff;
+  --control-bg: #dddddd;
+  --control-fg: #cccccc;
+  --text-color: #000000;
+  --text-muted: #555555;
+  --accent-color: #0000ff;
+  --border-color: #000000;
+  --card-border-radius: 6px;
+  --control-border-radius: 4px;
+}
+
+/* --- Global Resets --- */
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  overflow: hidden;
+}
+
+/* --- Card Style --- */
+.card.flex-grow-1 {
+  overflow-y: auto;
+}
+
+.card {
+  background-color: var(--panel-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--card-border-radius) !important;
+  box-shadow: none;
+}
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight: normal;
+  color: var(--text-color);
+}
+
+/* --- Form Controls --- */
+.form-label {
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.form-control,
+.form-select {
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--control-border-radius) !important;
+  color: var(--text-color) !important;
+  transition: none;
+  box-shadow: none !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--bg-color) !important;
+  border: 2px solid var(--accent-color) !important;
+}
+
+/* --- Radio & Checkbox --- */
+.form-check-label {
+  color: var(--text-color);
+  font-weight: normal;
+}
+
+.form-check-input {
+  border-color: var(--border-color) !important;
+  border-radius: 0 !important;
+}
+
+.form-check-input:checked {
+  background-color: var(--text-color) !important;
+  border-color: var(--text-color) !important;
+}
+
+.form-check-input:focus {
+  box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+/* --- Slider --- */
+.form-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-color);
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+  margin-top: -7px;
+  border-radius: 0;
+}
+
+.form-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--bg-color);
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* --- Buttons --- */
+.btn {
+  font-weight: normal !important;
+  transition: none !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 2px 2px 0px 0px var(--border-color);
+}
+
+.btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: none !important;
+}
+
+.btn-primary {
+  background-color: var(--accent-color) !important;
+  color: #fff !important;
+}
+.btn-primary:hover {
+  filter: none;
+}
+.btn-primary:disabled {
+  background-color: var(--control-fg) !important;
+  opacity: 1 !important;
+  color: var(--text-muted) !important;
+}
+
+.btn-outline-secondary {
+  color: var(--text-color) !important;
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+}
+.btn-outline-secondary:hover {
+  background-color: var(--control-bg) !important;
+  color: var(--text-color) !important;
+}
+
+/* --- Character List --- */
+.overflow-auto.flex-grow-1 {
+    height: 0;
+}
+
+.list-group-item {
+  border-color: var(--border-color) !important;
+  background-color: transparent;
+  transition: none !important;
+  border-radius: 0 !important;
+}
+
+.list-group-item strong {
+    font-weight: normal;
+}
+
+/* Scrollbar */
+.overflow-auto::-webkit-scrollbar {
+  width: 16px;
+}
+.overflow-auto::-webkit-scrollbar-track {
+  background: var(--bg-color);
+  border-left: 1px solid var(--border-color);
+}
+.overflow-auto::-webkit-scrollbar-thumb {
+  background: var(--control-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+}
+.overflow-auto::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+
+/* --- Footer & Status --- */
+.alert {
+  background-color: var(--panel-bg) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--control-border-radius) !important;
+}
+
+.progress {
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--border-color);
+}
+.progress-bar {
+  background-color: var(--text-color) !important;
+}
+
+audio {
+  width: 100%;
+  margin-top: 1rem;
+  filter: none;
+}
+
+header > h1 {
+    font-size: 2rem;
+    font-weight: normal;
+    color: var(--text-color);
+}
