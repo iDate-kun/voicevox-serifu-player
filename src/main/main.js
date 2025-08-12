@@ -2,10 +2,10 @@ const { app, BrowserWindow, ipcMain, net } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const ffmpeg = require('fluent-ffmpeg');
-const axios = require('axios');
 
 const VOICEVOX_API_URL = 'http://localhost:50021';
 const OUTPUT_DIR = path.join(app.getAppPath(), 'output');
+const FAVORITES_PATH = path.join(app.getPath('userData'), 'favorites.json');
 
 // --- Helper Functions ---
 const ensureOutputDir = async () => {
@@ -29,13 +29,13 @@ const createSilentWav = async (filePath, durationSeconds) => {
 
   // RIFF header
   buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(36 + dataSize, 4); // file size - 8
+  buffer.writeUInt32LE(36 + dataSize, 4);
   buffer.write('WAVE', 8);
 
   // fmt subchunk
   buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16); // subchunk size
-  buffer.writeUInt16LE(1, 20); // audio format (1 for PCM)
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
   buffer.writeUInt16LE(numChannels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(byteRate, 28);
@@ -46,10 +46,8 @@ const createSilentWav = async (filePath, durationSeconds) => {
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
 
-  // The rest of the buffer is already filled with zeros (silence)
   await fs.writeFile(filePath, buffer);
 };
-
 
 // --- IPC Handlers ---
 ipcMain.handle('get-characters', () => {
@@ -83,7 +81,7 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
   const tempFiles = [];
   const finalAudioFiles = [];
   const totalSpeakers = speakerIds.length;
-  const totalSteps = totalSpeakers * (prependName ? 3 : 1) + 1; // 1 for final concat
+  const totalSteps = totalSpeakers * (prependName ? 3 : 1) + 1;
   let currentStep = 0;
 
   const sendProgress = (status) => {
@@ -101,8 +99,14 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
         response.on('data', (chunk) => chunks.push(chunk));
         response.on('end', () => {
           const buffer = Buffer.concat(chunks);
-          if (response.statusCode !== 200) { return reject(new Error(`API Error: ${response.statusCode} - ${buffer.toString()}`)) }
-          if (responseType === 'json') { resolve(JSON.parse(buffer.toString())); } else { resolve(buffer); }
+          if (response.statusCode !== 200) {
+            return reject(new Error(`API Error: ${response.statusCode} - ${buffer.toString()}`));
+          }
+          if (responseType === 'json') {
+            resolve(JSON.parse(buffer.toString()));
+          } else {
+            resolve(buffer);
+          }
         });
         response.on('error', reject);
       });
@@ -118,7 +122,6 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
     for (let i = 0; i < totalSpeakers; i++) {
       const speakerId = speakerIds[i];
       const speakerName = speakerNames[i] || `ID:${speakerId}`;
-      
       let speakerFinalAudioPath;
 
       if (prependName) {
@@ -146,13 +149,22 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
         // 4. Concat name + silence + text
         sendProgress(`[${i + 1}/${totalSpeakers}] ${speakerName}の音声を結合中...`);
         const speakerConcatListPath = path.join(OUTPUT_DIR, `concat_speaker_${i}.txt`);
-       const concatContent = `file '${namePath.replace(/\\/g, '/')}'\nfile '${silencePath.replace(/\\/g, '/')}'\nfile '${textPath.replace(/\\/g, '/')}'`;
- await fs.writeFile(speakerConcatListPath, concatContent);
+        const concatContent = 
+          `file '${namePath.replace(/\\/g, '/')}'\n` +
+          `file '${silencePath.replace(/\\/g, '/')}'\n` +
+          `file '${textPath.replace(/\\/g, '/')}'`;
+        await fs.writeFile(speakerConcatListPath, concatContent);
         tempFiles.push(speakerConcatListPath);
 
         speakerFinalAudioPath = path.join(OUTPUT_DIR, `final_speaker_${i}.wav`);
         await new Promise((resolve, reject) => {
-          ffmpeg().input(speakerConcatListPath).inputOptions(['-f concat', '-safe 0']).output(speakerFinalAudioPath).on('end', resolve).on('error', reject).run();
+          ffmpeg()
+            .input(speakerConcatListPath)
+            .inputOptions(['-f concat', '-safe 0'])
+            .output(speakerFinalAudioPath)
+            .on('end', resolve)
+            .on('error', reject)
+            .run();
         });
         tempFiles.push(speakerFinalAudioPath);
 
@@ -174,7 +186,11 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
 
     if (finalAudioFiles.length === 1) {
       await new Promise((resolve, reject) => {
-        ffmpeg(finalAudioFiles[0]).audioCodec('libmp3lame').on('error', reject).on('end', resolve).save(outputPath);
+        ffmpeg(finalAudioFiles[0])
+          .audioCodec('libmp3lame')
+          .on('error', reject)
+          .on('end', resolve)
+          .save(outputPath);
       });
     } else {
       const concatListPath = path.join(OUTPUT_DIR, `concat_final.txt`);
@@ -185,13 +201,24 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
         const intervalSilencePath = path.join(OUTPUT_DIR, `silence_interval_${interval}s.wav`);
         await createSilentWav(intervalSilencePath, interval);
         tempFiles.push(intervalSilencePath);
-       concatContent = finalAudioFiles.map(f => `file '${f.replace(/\\/g, '/')}'`).join(`\nfile '${intervalSilencePath.replace(/\\/g, '/')}'\n`);
- } else {
-        concatContent = finalAudioFiles.map(f => `file '${f.replace(/\\/g, '/')}'`).join(`\nfile '${intervalSilencePath.replace(/\\/g, '/')}'\n`);
-     }
+        concatContent = finalAudioFiles
+          .map(f => `file '${f.replace(/\\/g, '/')}'`)
+          .join(`\nfile '${intervalSilencePath.replace(/\\/g, '/')}'\n`);
+      } else {
+        concatContent = finalAudioFiles
+          .map(f => `file '${f.replace(/\\/g, '/')}'`)
+          .join('\n');
+      }
+
       await fs.writeFile(concatListPath, concatContent);
       await new Promise((resolve, reject) => {
-        ffmpeg().input(concatListPath).inputOptions(['-f concat', '-safe 0']).outputOptions('-c:a libmp3lame').on('error', reject).on('end', resolve).save(outputPath);
+        ffmpeg()
+          .input(concatListPath)
+          .inputOptions(['-f concat', '-safe 0'])
+          .outputOptions('-c:a libmp3lame')
+          .on('error', reject)
+          .on('end', resolve)
+          .save(outputPath);
       });
     }
     
@@ -209,28 +236,44 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
   }
 });
 
+ipcMain.handle('save-favorites', async (event, favorites) => {
+  try {
+    await fs.writeFile(FAVORITES_PATH, JSON.stringify(Array.from(favorites)));
+  } catch (error) {
+    console.error('Failed to save favorites:', error);
+  }
+});
+
+ipcMain.handle('load-favorites', async () => {
+  try {
+    const data = await fs.readFile(FAVORITES_PATH);
+    return JSON.parse(data);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+    console.error('Failed to load favorites:', error);
+    return [];
+  }
+});
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'), // preloadスクリプトを後で作成
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  // WebpackでビルドされたHTMLをロード
   mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
-
-
-  // 開発者ツールを開く
-  //mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -239,5 +282,3 @@ app.whenReady().then(() => {
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
-
-// ここに後ほどAPI関連のIPCハンドラを追加する

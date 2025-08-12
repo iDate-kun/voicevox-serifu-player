@@ -49,18 +49,6 @@ const GENDERS = {
   'Other': 'その他',
 };
 
-// 背景色に基づいて適切な文字色（黒または白）を返すヘルパー関数
-const getTextColorForBg = (hexColor) => {
-  if (!hexColor || hexColor.length < 7) return '#000000'; // デフォルトは黒
-  const r = parseInt(hexColor.substr(1, 2), 16);
-  const g = parseInt(hexColor.substr(3, 2), 16);
-  const b = parseInt(hexColor.substr(5, 2), 16);
-  // YIQ式を用いて輝度を計算
-  const luminance = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-  return luminance > 150 ? '#000000' : '#FFFFFF'; // 閾値は150に設定
-};
-
-
 function App() {
   // --- State管理 ---
   const [allCharacters, setAllCharacters] = useState([]);
@@ -79,39 +67,51 @@ function App() {
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [isMultiStyleMode, setIsMultiStyleMode] = useState(false);
   const [expandedSpeakers, setExpandedSpeakers] = useState(new Set());
+  const [favorites, setFavorites] = useState(new Set());
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const audioRef = useRef(null);
+  const isInitialMount = useRef(true);
 
   // --- 副作用 ---
   useEffect(() => {
-    const fetchCharacters = async () => {
-      setStatus('キャラクターを読み込んでいます...');
+    const fetchCharactersAndFavorites = async () => {
+      setStatus('キャラクターと設定を読み込んでいます...');
       try {
-        const speakerData = await window.electronAPI.getCharacters();
+        const [speakerData, loadedFavorites] = await Promise.all([
+          window.electronAPI.getCharacters(),
+          window.electronAPI.loadFavorites(),
+        ]);
+
         if (speakerData) {
           const characters = speakerData.map(speaker => {
             const charMeta = characterMeta[speaker.name] || { gender: 'N/A', color: '#FFFFFF', isTohoku: false };
             return {
               ...speaker,
-              ...charMeta, // キャラクター自体にメタデータを付与
+              ...charMeta,
               styles: speaker.styles.map(style => ({
                 ...style,
                 speakerName: speaker.name,
-                ...charMeta // 各スタイルにもメタデータを付与
+                speaker_uuid: speaker.speaker_uuid,
+                ...charMeta
               }))
             };
           });
           setAllCharacters(characters);
-          setStatus('キャラクターの読み込み完了');
-        } else {
-          setStatus('エラー: キャラクターを読み込めませんでした。Voicevoxは起動していますか？');
         }
+
+        if (loadedFavorites) {
+          setFavorites(new Set(loadedFavorites));
+        }
+
+        setStatus('読み込み完了');
       } catch (error) {
         console.error(error);
         setStatus(`エラー: ${error.message}`);
       }
     };
-    fetchCharacters();
+
+    fetchCharactersAndFavorites();
 
     const handleProgress = ({ progress, status }) => {
       setProgress(progress);
@@ -130,10 +130,11 @@ function App() {
       const genderMatch = genderFilter === 'すべて' || char.gender === genderFilter;
       const tohokuMatch = !showTohokuOnly || char.isTohoku;
       const selectedMatch = !showSelectedOnly || char.styles.some(style => selectedStyles.has(style.id));
-      return genderMatch && tohokuMatch && selectedMatch;
+      const favoritesMatch = !showFavoritesOnly || favorites.has(char.speaker_uuid);
+      return genderMatch && tohokuMatch && selectedMatch && favoritesMatch;
     });
     setDisplayedCharacters(filtered);
-  }, [allCharacters, genderFilter, showTohokuOnly, showSelectedOnly, selectedStyles]);
+  }, [allCharacters, genderFilter, showTohokuOnly, showSelectedOnly, selectedStyles, favorites, showFavoritesOnly]);
 
 
   useEffect(() => {
@@ -142,7 +143,25 @@ function App() {
     }
   }, [audioSrc, autoplay]);
 
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+    } else {
+      window.electronAPI.saveFavorites(Array.from(favorites));
+    }
+  }, [favorites]);
+
   // --- イベントハンドラ ---
+  const handleToggleFavorite = (speakerUuid) => {
+    const newFavorites = new Set(favorites);
+    if (newFavorites.has(speakerUuid)) {
+      newFavorites.delete(speakerUuid);
+    } else {
+      newFavorites.add(speakerUuid);
+    }
+    setFavorites(newFavorites);
+  };
+
   const handleStyleSelection = (styleId) => {
     const newSelection = new Set(selectedStyles);
     if (newSelection.has(styleId)) {
@@ -180,7 +199,10 @@ function App() {
     if (isMultiStyleMode) {
       allVisibleStyleIds = displayedCharacters.flatMap(char => char.styles.map(style => style.id));
     } else {
-      allVisibleStyleIds = displayedCharacters.flatMap(char => char.styles.filter(s => s.name === 'ノーマル').map(style => style.id));
+      allVisibleStyleIds = displayedCharacters.flatMap(char => {
+        const normalStyle = char.styles.find(s => s.name === 'ノーマル');
+        return normalStyle ? [normalStyle.id] : [];
+      });
     }
     setSelectedStyles(new Set(allVisibleStyleIds));
   };
@@ -204,7 +226,7 @@ function App() {
         }
         return `ID:${id}`;
     });
-    const safeFilename = text.substring(0, 30).replace(/[\\/:*?"<>|]/g, '_') || 'output';
+    const safeFilename = text.substring(0, 30).replace(/[\/:*?"<>|]/g, '_') || 'output';
 
     try {
       const outputPath = await window.electronAPI.generateAudio({
@@ -230,10 +252,8 @@ function App() {
         <ul className="list-group">
           {displayedCharacters.map(char => {
             const areAllStylesSelected = char.styles.length > 0 && char.styles.every(s => selectedStyles.has(s.id));
-            const charTextColor = getTextColorForBg(char.color);
             const headerStyle = {
               backgroundColor: char.color + '99', // 60%
-              color: charTextColor,
               cursor: 'pointer',
             };
 
@@ -244,15 +264,17 @@ function App() {
                   style={headerStyle}
                   onClick={() => toggleSpeakerExpansion(char.speaker_uuid)}
                 >
-                  <div>
-                    <input
-                      className="form-check-input me-2"
-                      type="checkbox"
-                      checked={areAllStylesSelected}
-                      onChange={(e) => handleSelectAllStyles(char, e.target.checked)}
-                      onClick={(e) => e.stopPropagation()} // 親のonClickイベントを抑制
-                    />
-                    <strong>{char.name}</strong>
+                  <div className="d-flex align-items-center">
+                    <span onClick={(e) => {e.stopPropagation(); handleToggleFavorite(char.speaker_uuid);}} style={{cursor: 'pointer', marginRight: '8px'}}>{favorites.has(char.speaker_uuid) ? '★' : '☆'}</span>
+                    <div onClick={(e) => { e.stopPropagation(); handleSelectAllStyles(char, !areAllStylesSelected); }} style={{cursor: 'pointer'}}>
+                      <input
+                        className="form-check-input me-2"
+                        type="checkbox"
+                        checked={areAllStylesSelected}
+                        readOnly
+                      />
+                      <strong>{char.name}</strong>
+                    </div>
                   </div>
                   <span>{expandedSpeakers.has(char.speaker_uuid) ? '▲' : '▼'}</span>
                 </div>
@@ -260,15 +282,10 @@ function App() {
                   <ul className="list-group list-group-flush" style={{backgroundColor: char.color + '4D'}}>
                     {char.styles.map(style => {
                       const isSelected = selectedStyles.has(style.id);
-                      const itemStyle = {
-                        backgroundColor: isSelected ? char.color : 'transparent',
-                        color: isSelected ? charTextColor : 'inherit',
-                        transition: 'background-color 0.2s ease-in-out',
-                      };
                       return (
-                        <li key={style.id} className="list-group-item p-0" style={itemStyle}>
+                        <li key={style.id} className="list-group-item p-0" onClick={() => handleStyleSelection(style.id)}>
                           <label className="d-block w-100 p-2" style={{ cursor: 'pointer' }}>
-                            <input className="form-check-input me-2" type="checkbox" onChange={() => handleStyleSelection(style.id)} checked={isSelected} />
+                            <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
                             {style.name}
                           </label>
                         </li>
@@ -283,24 +300,25 @@ function App() {
       );
     } else {
       // ノーマルモード
-      const normalStyles = displayedCharacters.flatMap(char => char.styles.filter(s => s.name === 'ノーマル'));
       return (
         <ul className="list-group">
-          {normalStyles.map(style => {
-            const isSelected = selectedStyles.has(style.id);
-            const textColor = getTextColorForBg(style.color);
+          {displayedCharacters.map(char => {
+            const normalStyle = char.styles.find(s => s.name === 'ノーマル');
+            if (!normalStyle) return null;
+
+            const isSelected = selectedStyles.has(normalStyle.id);
             const itemStyle = {
-              backgroundColor: isSelected ? style.color : style.color + '99',
-              color: textColor,
-              border: isSelected ? `2px solid ${textColor === '#000000' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)'}` : '1px solid rgba(0,0,0,.125)',
+              backgroundColor: isSelected ? char.color : char.color + '99',
+              border: isSelected ? `2px solid #000000` : '1px solid rgba(0,0,0,.125)',
               transition: 'background-color 0.2s ease-in-out, border 0.2s ease-in-out',
             };
             return (
-              <li key={style.id} className="list-group-item p-0" style={itemStyle}>
-                <label className="d-block w-100 p-2" style={{ cursor: 'pointer' }}>
-                  <input className="form-check-input me-2" type="checkbox" onChange={() => handleStyleSelection(style.id)} checked={isSelected} />
-                  {style.speakerName} {style.isTohoku && ' (東北)'}
-                </label>
+              <li key={char.speaker_uuid} className="list-group-item p-0 d-flex align-items-center" style={itemStyle}>
+                <span onClick={(e) => {e.stopPropagation(); handleToggleFavorite(char.speaker_uuid);}} style={{cursor: 'pointer', padding: '8px'}}>{favorites.has(char.speaker_uuid) ? '★' : '☆'}</span>
+                <div onClick={() => handleStyleSelection(normalStyle.id)} className="flex-grow-1 d-flex align-items-center p-2" style={{cursor: 'pointer'}}>
+                  <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
+                  {char.name} {char.isTohoku && ' (東北)'}
+                </div>
               </li>
             );
           })}
@@ -339,6 +357,10 @@ function App() {
                 <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="selected-filter" checked={showSelectedOnly} onChange={(e) => setShowSelectedOnly(e.target.checked)} />
                   <label className="form-check-label" htmlFor="selected-filter">選択済みのみ</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="favorites-filter" checked={showFavoritesOnly} onChange={(e) => setShowFavoritesOnly(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="favorites-filter">お気に入りのみ</label>
                 </div>
               </div>
             </div>

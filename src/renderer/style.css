@@ -152,6 +152,7 @@ body {
   background-color: transparent;
   transition: none !important;
   border-radius: 0 !important;
+  color: black !important;
 }
 
 .list-group-item strong {
