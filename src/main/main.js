@@ -4,7 +4,16 @@ const fs = require('fs').promises;
 const ffmpeg = require('fluent-ffmpeg');
 
 const VOICEVOX_API_URL = 'http://localhost:50021';
-const OUTPUT_DIR = path.join(app.getAppPath(), 'output');
+const isDev = !app.isPackaged;
+
+// 開発時は __dirname、ビルド後は process.resourcesPath を基準にパスを組み立てる
+const getAssetPath = (...subPaths) => {
+  return isDev
+    ? path.join(__dirname, '../../', ...subPaths)
+    : path.join(process.resourcesPath, ...subPaths);
+};
+
+const OUTPUT_DIR = path.join(app.getPath('userData'), 'output'); // 固定Sドライブ排除
 const FAVORITES_PATH = path.join(app.getPath('userData'), 'favorites.json');
 
 // --- Helper Functions ---
@@ -27,12 +36,10 @@ const createSilentWav = async (filePath, durationSeconds) => {
 
   const buffer = Buffer.alloc(44 + dataSize);
 
-  // RIFF header
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(36 + dataSize, 4);
   buffer.write('WAVE', 8);
 
-  // fmt subchunk
   buffer.write('fmt ', 12);
   buffer.writeUInt32LE(16, 16);
   buffer.writeUInt16LE(1, 20);
@@ -42,7 +49,6 @@ const createSilentWav = async (filePath, durationSeconds) => {
   buffer.writeUInt16LE(blockAlign, 32);
   buffer.writeUInt16LE(bitDepth, 34);
 
-  // data subchunk
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
 
@@ -125,7 +131,6 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
       let speakerFinalAudioPath;
 
       if (prependName) {
-        // 1. Generate name audio
         sendProgress(`[${i + 1}/${totalSpeakers}] ${speakerName}の名前を生成中...`);
         const nameQuery = await postRequest(`${VOICEVOX_API_URL}/audio_query?speaker=${speakerId}&text=${encodeURIComponent(speakerName)}`);
         const nameWav = await postRequest(`${VOICEVOX_API_URL}/synthesis?speaker=${speakerId}`, nameQuery, 'buffer');
@@ -133,12 +138,10 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
         await fs.writeFile(namePath, nameWav);
         tempFiles.push(namePath);
 
-        // 2. Generate 1s silence
         const silencePath = path.join(OUTPUT_DIR, `temp_silence_1s_${Date.now()}.wav`);
         await createSilentWav(silencePath, 1);
         tempFiles.push(silencePath);
 
-        // 3. Generate text audio
         sendProgress(`[${i + 1}/${totalSpeakers}] ${speakerName}のセリフを生成中...`);
         const textQuery = await postRequest(`${VOICEVOX_API_URL}/audio_query?speaker=${speakerId}&text=${encodeURIComponent(text)}`);
         const textWav = await postRequest(`${VOICEVOX_API_URL}/synthesis?speaker=${speakerId}`, textQuery, 'buffer');
@@ -146,10 +149,9 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
         await fs.writeFile(textPath, textWav);
         tempFiles.push(textPath);
 
-        // 4. Concat name + silence + text
         sendProgress(`[${i + 1}/${totalSpeakers}] ${speakerName}の音声を結合中...`);
         const speakerConcatListPath = path.join(OUTPUT_DIR, `concat_speaker_${i}.txt`);
-        const concatContent = 
+        const concatContent =
           `file '${namePath.replace(/\\/g, '/')}'\n` +
           `file '${silencePath.replace(/\\/g, '/')}'\n` +
           `file '${textPath.replace(/\\/g, '/')}'`;
@@ -221,7 +223,7 @@ ipcMain.handle('generate-audio', async (event, { text, speakerIds, interval, fil
           .save(outputPath);
       });
     }
-    
+
     event.sender.send('progress-update', { progress: 100, status: `生成完了: ${outputPath}` });
     return outputPath;
 
@@ -261,7 +263,7 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
-    icon: path.join('S:', 'gemini-code', 'voicevox-serihu', 'assets', 'voicevox-serihu-player-icon.ico'),
+    icon: getAssetPath('assets', 'voicevox-serihu-player-icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -269,8 +271,13 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
-  // mainWindow.webContents.openDevTools();
+  if (isDev) {
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+  } else {
+    mainWindow.loadFile(path.join(process.resourcesPath, 'dist', 'index.html'));
+  }
+
+  //mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

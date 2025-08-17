@@ -31,8 +31,31 @@
     "webpack-cli": "^6.0.1"
   },
   "build": {
-  "icon": "build/assets/voicevox-serihu-player-icon.ico"
+  "appId": "com.electron.voicevox-serihu",
+  "productName": "VOICEVOX SERIHU",
+  "directories": {
+    "output": "output"
+  },
+  "files": [
+    "dist/",
+    "src/main/",
+    "assets/",
+    "package.json"
+  ],
+  "extraResources": [
+    { "from": "dist/", "to": "dist/" },
+    { "from": "assets/", "to": "assets/" }
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "assets/voicevox-serihu-player-icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
 }
-  
+
+ 
 }
 
