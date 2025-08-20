@@ -6,8 +6,8 @@
 ノベルゲームのボイス作成、コンテンツ制作でのキャラクターの声の比較・検討などを効率化します。
 
 <br>
-使い方の動画
-https://www.nicovideo.jp/watch/sm45311403
+### 🎥 使い方動画
+[![使い方の動画](./VSPsukusyo.png)](https://www.nicovideo.jp/watch/sm45311403)
 <br>
 
 ## 📥 ダウンロード (Download)
