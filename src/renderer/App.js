@@ -330,7 +330,7 @@ function App() {
   };
 
   return (
-    <div className="container-fluid vh-100 d-flex flex-column p-3">
+    <div className="container-fluid d-flex flex-column p-3">
       <header className="mb-3 d-flex justify-content-between align-items-baseline"><h1>Voicevoxセリフプレイヤー</h1><small className='text-muted'>このアプリは全画面でのご利用を推奨します。</small></header>
       <div className="row flex-grow-1 gx-3">
         <div className="col-md-4 d-flex flex-column">
