@@ -43,10 +43,17 @@ const characterMeta = {
 };
 
 const GENDERS = {
-  'All': 'すべて',
-  'Female': '女性',
-  'Male': '男性',
-  'Other': 'その他',
+  All: 'すべて',
+  Female: '女性',
+  Male: '男性',
+  Other: 'その他',
+};
+
+// --- パス→file:// URL 変換（Windows対応含む） ---
+const toFileUrl = (p) => {
+  const normalized = String(p).replace(/\\/g, '/'); // \ -> /
+  const withDrive = /^[A-Za-z]:/.test(normalized) ? `/${normalized}` : normalized; // C: なら / を付与
+  return `file://${withDrive}`;
 };
 
 function App() {
@@ -70,8 +77,11 @@ function App() {
   const [favorites, setFavorites] = useState(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewFilesExist, setPreviewFilesExist] = useState(false);
+  const [generatingPreviews, setGeneratingPreviews] = useState(false);
 
   const audioRef = useRef(null);
+  const previewAudioRef = useRef(null);
   const isInitialMount = useRef(true);
 
   // --- 副作用 ---
@@ -79,23 +89,24 @@ function App() {
     const fetchCharactersAndFavorites = async () => {
       setStatus('キャラクターと設定を読み込んでいます...');
       try {
-        const [speakerData, loadedFavorites] = await Promise.all([
+        const [speakerData, loadedFavorites, previewsExist] = await Promise.all([
           window.electronAPI.getCharacters(),
           window.electronAPI.loadFavorites(),
+          window.electronAPI.checkPreviewFiles(),
         ]);
 
         if (speakerData) {
-          const characters = speakerData.map(speaker => {
+          const characters = speakerData.map((speaker) => {
             const charMeta = characterMeta[speaker.name] || { gender: 'N/A', color: '#FFFFFF', isTohoku: false };
             return {
               ...speaker,
               ...charMeta,
-              styles: speaker.styles.map(style => ({
+              styles: speaker.styles.map((style) => ({
                 ...style,
                 speakerName: speaker.name,
                 speaker_uuid: speaker.speaker_uuid,
-                ...charMeta
-              }))
+                ...charMeta,
+              })),
             };
           });
           setAllCharacters(characters);
@@ -105,6 +116,7 @@ function App() {
           setFavorites(new Set(loadedFavorites));
         }
 
+        setPreviewFilesExist(previewsExist);
         setStatus('読み込み完了');
       } catch (error) {
         console.error(error);
@@ -118,19 +130,18 @@ function App() {
       setProgress(progress);
       setStatus(status);
     };
-    
+
     const cleanup = window.electronAPI.onProgressUpdate(handleProgress);
     return () => {
       if (cleanup) cleanup();
     };
-
   }, []);
 
   useEffect(() => {
-    const filtered = allCharacters.filter(char => {
+    const filtered = allCharacters.filter((char) => {
       const genderMatch = genderFilter === 'すべて' || char.gender === genderFilter;
       const tohokuMatch = !showTohokuOnly || char.isTohoku;
-      const selectedMatch = !showSelectedOnly || char.styles.some(style => selectedStyles.has(style.id));
+      const selectedMatch = !showSelectedOnly || char.styles.some((style) => selectedStyles.has(style.id));
       const favoritesMatch = !showFavoritesOnly || favorites.has(char.speaker_uuid);
       const searchMatch = !searchQuery || char.name.toLowerCase().includes(searchQuery.toLowerCase());
       return genderMatch && tohokuMatch && selectedMatch && favoritesMatch && searchMatch;
@@ -138,10 +149,9 @@ function App() {
     setDisplayedCharacters(filtered);
   }, [allCharacters, genderFilter, showTohokuOnly, showSelectedOnly, selectedStyles, favorites, showFavoritesOnly, searchQuery]);
 
-
   useEffect(() => {
     if (audioSrc && audioRef.current && autoplay) {
-      audioRef.current.play().catch(e => console.error('自動再生に失敗しました', e));
+      audioRef.current.play().catch((e) => console.error('自動再生に失敗しました', e));
     }
   }, [audioSrc, autoplay]);
 
@@ -154,6 +164,47 @@ function App() {
   }, [favorites]);
 
   // --- イベントハンドラ ---
+  const handlePreview = async (characterName, type) => {
+    const sanitize = (name) => name.replace(/[\/:*?"<>|]/g, '_');
+
+    const previewTexts = {
+      name: `${characterName}です。`,
+      test: 'テストです',
+      amenbo: 'あめんぼあかいなあいうえお',
+    };
+
+    const text = previewTexts[type];
+    const fileName = `${sanitize(characterName)}_${sanitize(text.substring(0, 10))}.mp3`;
+
+    try {
+      const basePath = await window.electronAPI.getPreviewAssetPath(); // Promise想定
+      const fsPath = `${String(basePath).replace(/\\/g, '/')}/${fileName}`;
+      const audioPath = toFileUrl(fsPath);
+      if (previewAudioRef.current) {
+        previewAudioRef.current.src = audioPath;
+        await previewAudioRef.current.play();
+      }
+    } catch (e) {
+      console.error('プレビュー再生に失敗', e);
+      setStatus(`プレビューファイルが見つかりません: ${fileName}`);
+    }
+  };
+
+  const handleGeneratePreviews = async () => {
+    setGeneratingPreviews(true);
+    setStatus('プレビュー音声を生成中...');
+    try {
+      await window.electronAPI.generatePreviewFiles();
+      setPreviewFilesExist(true);
+      setStatus('プレビュー音声の生成が完了しました。');
+    } catch (error) {
+      console.error('プレビュー音声の生成に失敗しました:', error);
+      setStatus(`エラー: ${error.message}`);
+    } finally {
+      setGeneratingPreviews(false);
+    }
+  };
+
   const handleToggleFavorite = (speakerUuid) => {
     const newFavorites = new Set(favorites);
     if (newFavorites.has(speakerUuid)) {
@@ -176,7 +227,7 @@ function App() {
 
   const handleSelectAllStyles = (char, shouldSelect) => {
     const newSelection = new Set(selectedStyles);
-    char.styles.forEach(style => {
+    char.styles.forEach((style) => {
       if (shouldSelect) {
         newSelection.add(style.id);
       } else {
@@ -185,7 +236,7 @@ function App() {
     });
     setSelectedStyles(newSelection);
   };
-  
+
   const toggleSpeakerExpansion = (speakerUuid) => {
     const newExpansion = new Set(expandedSpeakers);
     if (newExpansion.has(speakerUuid)) {
@@ -199,10 +250,10 @@ function App() {
   const handleSelectAllVisible = () => {
     let allVisibleStyleIds;
     if (isMultiStyleMode) {
-      allVisibleStyleIds = displayedCharacters.flatMap(char => char.styles.map(style => style.id));
+      allVisibleStyleIds = displayedCharacters.flatMap((char) => char.styles.map((style) => style.id));
     } else {
-      allVisibleStyleIds = displayedCharacters.flatMap(char => {
-        const normalStyle = char.styles.find(s => s.name === 'ノーマル');
+      allVisibleStyleIds = displayedCharacters.flatMap((char) => {
+        const normalStyle = char.styles.find((s) => s.name === 'ノーマル');
         return normalStyle ? [normalStyle.id] : [];
       });
     }
@@ -217,72 +268,86 @@ function App() {
     setLoading(true);
     setProgress(0);
     setAudioSrc(null);
-    
+
     const speakerIds = Array.from(selectedStyles);
-    const speakerNames = speakerIds.map(id => {
-        for (const char of allCharacters) {
-            const style = char.styles.find(s => s.id === id);
-            if (style) {
-                return isMultiStyleMode ? `${style.speakerName} ${style.name}` : style.speakerName;
-            }
+    const speakerNames = speakerIds.map((id) => {
+      for (const char of allCharacters) {
+        const style = char.styles.find((s) => s.id === id);
+        if (style) {
+          return isMultiStyleMode ? `${style.speakerName} ${style.name}` : style.speakerName;
         }
-        return `ID:${id}`;
+      }
+      return `ID:${id}`;
     });
-    const safeFilename = text.substring(0, 30).replace(/[\\/:*?"<>|]/g, '_') || 'output';
+    const safeFilename = text.substring(0, 30).replace(/[\/:*?"<>|]/g, '_') || 'output';
 
     try {
       const outputPath = await window.electronAPI.generateAudio({
         text,
         speakerIds,
-        interval,
+        interval, // 数値で保持（下のsliderでNumber化）
         filename: safeFilename,
         speakerNames,
-        prependName: prependName
+        prependName: prependName,
       });
-      setAudioSrc(`file://${outputPath.replace(/\\/g, '/')}`);
+
+      setAudioSrc(toFileUrl(outputPath));
     } catch (error) {
       console.error('生成に失敗しました:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }; // ← セミコロンを忘れない
 
   const renderCharacterList = () => {
     if (isMultiStyleMode) {
       // スタイル選択モード
       return (
         <ul className="list-group">
-          {displayedCharacters.map(char => {
-            const areAllStylesSelected = char.styles.length > 0 && char.styles.every(s => selectedStyles.has(s.id));
+          {displayedCharacters.map((char) => {
+            const areAllStylesSelected = char.styles.length > 0 && char.styles.every((s) => selectedStyles.has(s.id));
             const headerStyle = {
               backgroundColor: char.color + '99', // 60%
               cursor: 'pointer',
             };
 
             return (
-              <li key={char.speaker_uuid} className="list-group-item p-0 mb-1" style={{ borderRadius: '0.25rem', overflow: 'hidden', border: 'none' }}>
+              <li
+                key={char.speaker_uuid}
+                className="list-group-item p-0 mb-1"
+                style={{ borderRadius: '0.25rem', overflow: 'hidden', border: 'none' }}
+              >
                 <div
                   className="d-flex justify-content-between align-items-center p-2"
                   style={headerStyle}
                   onClick={() => toggleSpeakerExpansion(char.speaker_uuid)}
                 >
                   <div className="d-flex align-items-center">
-                    <span onClick={(e) => {e.stopPropagation(); handleToggleFavorite(char.speaker_uuid);}} style={{cursor: 'pointer', marginRight: '8px'}}>{favorites.has(char.speaker_uuid) ? '★' : '☆'}</span>
-                    <div onClick={(e) => { e.stopPropagation(); handleSelectAllStyles(char, !areAllStylesSelected); }} style={{cursor: 'pointer'}}>
-                      <input
-                        className="form-check-input me-2"
-                        type="checkbox"
-                        checked={areAllStylesSelected}
-                        readOnly
-                      />
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(char.speaker_uuid);
+                      }}
+                      style={{ cursor: 'pointer', marginRight: '8px' }}
+                    >
+                      {favorites.has(char.speaker_uuid) ? '★' : '☆'}
+                    </span>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectAllStyles(char, !areAllStylesSelected);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <input className="form-check-input me-2" type="checkbox" checked={areAllStylesSelected} readOnly />
                       <strong>{char.name}</strong>
                     </div>
                   </div>
                   <span>{expandedSpeakers.has(char.speaker_uuid) ? '▲' : '▼'}</span>
                 </div>
                 {expandedSpeakers.has(char.speaker_uuid) && (
-                  <ul className="list-group list-group-flush" style={{backgroundColor: char.color + '4D'}}>
-                    {char.styles.map(style => {
+                  <ul className="list-group list-group-flush" style={{ backgroundColor: char.color + '4D' }}>
+                    {char.styles.map((style) => {
                       const isSelected = selectedStyles.has(style.id);
                       return (
                         <li key={style.id} className="list-group-item p-0" onClick={() => handleStyleSelection(style.id)}>
@@ -304,8 +369,8 @@ function App() {
       // ノーマルモード
       return (
         <ul className="list-group">
-          {displayedCharacters.map(char => {
-            const normalStyle = char.styles.find(s => s.name === 'ノーマル');
+          {displayedCharacters.map((char) => {
+            const normalStyle = char.styles.find((s) => s.name === 'ノーマル');
             if (!normalStyle) return null;
 
             const isSelected = selectedStyles.has(normalStyle.id);
@@ -316,10 +381,54 @@ function App() {
             };
             return (
               <li key={char.speaker_uuid} className="list-group-item p-0 d-flex align-items-center" style={itemStyle}>
-                <span onClick={(e) => {e.stopPropagation(); handleToggleFavorite(char.speaker_uuid);}} style={{cursor: 'pointer', padding: '8px'}}>{favorites.has(char.speaker_uuid) ? '★' : '☆'}</span>
-                <div onClick={() => handleStyleSelection(normalStyle.id)} className="flex-grow-1 d-flex align-items-center p-2" style={{cursor: 'pointer'}}>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleFavorite(char.speaker_uuid);
+                  }}
+                  style={{ cursor: 'pointer', padding: '8px' }}
+                >
+                  {favorites.has(char.speaker_uuid) ? '★' : '☆'}
+                </span>
+                <div
+                  onClick={() => handleStyleSelection(normalStyle.id)}
+                  className="flex-grow-1 d-flex align-items-center p-2"
+                  style={{ cursor: 'pointer' }}
+                >
                   <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
                   {char.name} {char.isTohoku && ' (東北)'}
+                </div>
+                <div className="ms-auto pe-2">
+                  <button
+                    className="btn btn-sm btn-outline-success me-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview(char.name, 'name');
+                    }}
+                    title={`${char.name}です。`}
+                  >
+                    ▶ 名前
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-success me-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview(char.name, 'test');
+                    }}
+                    title="テストです"
+                  >
+                    ▶ テスト
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline成功"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview(char.name, 'amenbo');
+                    }}
+                    title="あめんぼあかいなあいうえお"
+                  >
+                    ▶ あめんぼ
+                  </button>
                 </div>
               </li>
             );
@@ -331,92 +440,197 @@ function App() {
 
   return (
     <div className="container-fluid d-flex flex-column p-3">
-      <header className="mb-3 d-flex justify-content-between align-items-baseline"><h1>Voicevoxセリフプレイヤー</h1><small className='text-muted'>このアプリは全画面でのご利用を推奨します。</small></header>
+      <header className="mb-3 d-flex justify-content-between align-items-baseline">
+        <h1>Voicevoxセリフプレイヤー</h1>
+        <small className="text-muted">このアプリは全画面でのご利用を推奨します。</small>
+      </header>
       <div className="row flex-grow-1 gx-3">
         <div className="col-md-4 d-flex flex-column">
-          <div className="card flex-grow-1"><div className="card-body d-flex flex-column">
-            <h5 className="card-title">設定</h5>
-            <div className="mb-3">
-              <label htmlFor="text-input" className="form-label">セリフ</label>
-              <textarea id="text-input" className="form-control" rows="4" value={text} onChange={(e) => setText(e.target.value)}></textarea>
-            </div>
-            <div className="row mb-3">
-              <div className="col">
-                <label className="form-label">性別</label>
-                {Object.entries(GENDERS).map(([key, value]) => (
-                  <div className="form-check" key={key}>
-                    <input className="form-check-input" type="radio" name="gender" id={`gender-${key}`} checked={genderFilter === value} onChange={() => setGenderFilter(value)} />
-                    <label className="form-check-label" htmlFor={`gender-${key}`}>{value}</label>
+          <div className="card flex-grow-1">
+            <div className="card-body d-flex flex-column">
+              <h5 className="card-title">設定</h5>
+              <div className="mb-3">
+                <label htmlFor="text-input" className="form-label">
+                  セリフ
+                </label>
+                <textarea
+                  id="text-input"
+                  className="form-control"
+                  rows="4"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                ></textarea>
+              </div>
+              <div className="row mb-3">
+                <div className="col">
+                  <label className="form-label">性別</label>
+                  {Object.entries(GENDERS).map(([key, value]) => (
+                    <div className="form-check" key={key}>
+                      <input
+                        className="form-check-input"
+                        type="radio"
+                        name="gender"
+                        id={`gender-${key}`}
+                        checked={genderFilter === value}
+                        onChange={() => setGenderFilter(value)}
+                      />
+                      <label className="form-check-label" htmlFor={`gender-${key}`}>
+                        {value}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="col">
+                  <label className="form-label">グループ</label>
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="tohoku-filter"
+                      checked={showTohokuOnly}
+                      onChange={(e) => setShowTohokuOnly(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="tohoku-filter">
+                      東北プロジェクトのみ
+                    </label>
                   </div>
-                ))}
-              </div>
-              <div className="col">
-                <label className="form-label">グループ</label>
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="tohoku-filter" checked={showTohokuOnly} onChange={(e) => setShowTohokuOnly(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="tohoku-filter">東北プロジェクトのみ</label>
-                </div>
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="selected-filter" checked={showSelectedOnly} onChange={(e) => setShowSelectedOnly(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="selected-filter">選択済みのみ</label>
-                </div>
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="favorites-filter" checked={showFavoritesOnly} onChange={(e) => setShowFavoritesOnly(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="favorites-filter">お気に入りのみ</label>
-                </div>
-              </div>
-            </div>
-            <div className="mb-3">
-              <label htmlFor="interval-slider" className="form-label">音声間の間隔: {interval}秒</label>
-              <input type="range" className="form-range" min="0" max="5" step="0.1" id="interval-slider" value={interval} onChange={(e) => setInterval(e.target.value)} />
-            </div>
-            <div className="mt-auto pt-3 border-top">
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <div className="form-check form-switch">
-                  <input className="form-check-input" type="checkbox" role="switch" id="prepend-name-switch" checked={prependName} onChange={(e) => setPrependName(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="prepend-name-switch">話者名を読み上げる</label>
-                </div>
-                <div className="form-check form-switch">
-                  <input className="form-check-input" type="checkbox" role="switch" id="autoplay-switch" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="autoplay-switch">自動再生</label>
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="selected-filter"
+                      checked={showSelectedOnly}
+                      onChange={(e) => setShowSelectedOnly(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="selected-filter">
+                      選択済みのみ
+                    </label>
+                  </div>
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="favorites-filter"
+                      checked={showFavoritesOnly}
+                      onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="favorites-filter">
+                      お気に入りのみ
+                    </label>
+                  </div>
                 </div>
               </div>
-              <button className="btn btn-primary w-100" onClick={handleGenerate} disabled={loading || text.trim() === '' || selectedStyles.size === 0}>
-                {loading ? `生成中... (${progress}%)` : `音声生成 (${selectedStyles.size}スタイル選択中)`}
-              </button>
+              <div className="mb-3">
+                <label htmlFor="interval-slider" className="form-label">
+                  音声間の間隔: {interval}秒
+                </label>
+                <input
+                  type="range"
+                  className="form-range"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  id="interval-slider"
+                  value={interval}
+                  onChange={(e) => setInterval(Number(e.target.value))} // 数値化
+                />
+              </div>
+              <div className="border-top pt-3 mb-3">
+                <button
+                  className="btn btn-info w-100"
+                  onClick={handleGeneratePreviews}
+                  disabled={generatingPreviews || previewFilesExist}
+                >
+                  {generatingPreviews ? '生成中...' : previewFilesExist ? 'プレビュー音声は生成済みです' : 'プレビュー音声を生成'}
+                </button>
+              </div>
+              <div className="mt-auto pt-3 border-top">
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <div className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="prepend-name-switch"
+                      checked={prependName}
+                      onChange={(e) => setPrependName(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="prepend-name-switch">
+                      話者名を読み上げる
+                    </label>
+                  </div>
+                  <div className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="autoplay-switch"
+                      checked={autoplay}
+                      onChange={(e) => setAutoplay(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="autoplay-switch">
+                      自動再生
+                    </label>
+                  </div>
+                </div>
+                <button
+                  className="btn btn-primary w-100"
+                  onClick={handleGenerate}
+                  disabled={loading || text.trim() === '' || selectedStyles.size === 0}
+                >
+                  {loading ? `生成中... (${progress}%)` : `音声生成 (${selectedStyles.size}スタイル選択中)`}
+                </button>
+              </div>
             </div>
-          </div></div>
+          </div>
         </div>
         <div className="col-md-8 d-flex flex-column">
-          <div className="card flex-grow-1"><div className="card-body d-flex flex-column">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <h5 className="card-title mb-0">キャラクター ({displayedCharacters.length}人)</h5>
-              <div className="d-flex align-items-center">
-                <button className="btn btn-sm btn-outline-secondary me-2" onClick={handleSelectAllVisible}>すべて選択</button>
-                <button className="btn btn-sm btn-outline-secondary me-3" onClick={handleDeselectAll}>すべて解除</button>
-                <div className="form-check form-switch">
-                  <input className="form-check-input" type="checkbox" role="switch" id="style-mode-switch" checked={isMultiStyleMode} onChange={(e) => setIsMultiStyleMode(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="style-mode-switch">スタイル選択</label>
+          <div className="card flex-grow-1">
+            <div className="card-body d-flex flex-column">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5 className="card-title mb-0">キャラクター ({displayedCharacters.length}人)</h5>
+                <div className="d-flex align-items-center">
+                  <button className="btn btn-sm btn-outline-secondary me-2" onClick={handleSelectAllVisible}>
+                    すべて選択
+                  </button>
+                  <button className="btn btn-sm btn-outline-secondary me-3" onClick={handleDeselectAll}>
+                    すべて解除
+                  </button>
+                  <div className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="style-mode-switch"
+                      checked={isMultiStyleMode}
+                      onChange={(e) => setIsMultiStyleMode(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="style-mode-switch">
+                      スタイル選択
+                    </label>
+                  </div>
                 </div>
               </div>
+              <div className="mb-3">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="キャラクター名で検索..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="overflow-auto flex-grow-1">
+                {displayedCharacters.length > 0 ? renderCharacterList() : <p>{allCharacters.length > 0 ? 'フィルターに一致するキャラクターがいません。' : status}</p>}
+              </div>
             </div>
-            <div className="mb-3">
-              <input
-                type="text"
-                className="form-control"
-                placeholder="キャラクター名で検索..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="overflow-auto flex-grow-1">
-              {displayedCharacters.length > 0 ? renderCharacterList() : (<p>{allCharacters.length > 0 ? 'フィルターに一致するキャラクターがいません。' : status}</p>)}
-            </div>
-          </div></div>
+          </div>
         </div>
       </div>
       <footer className="mt-3">
-        <div className="alert alert-info" role="alert">ステータス: {status}</div>
+        <div className="alert alert-info" role="alert">
+          ステータス: {status}
+        </div>
         {loading && (
           <div className="progress" style={{ height: '20px' }}>
             <div
@@ -432,6 +646,7 @@ function App() {
           </div>
         )}
         {audioSrc && !loading && <audio ref={audioRef} src={audioSrc} controls className="w-100 mt-2" />}
+        <audio ref={previewAudioRef} style={{ display: 'none' }} />
       </footer>
     </div>
   );
