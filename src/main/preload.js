@@ -17,5 +17,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadFavorites: () => ipcRenderer.invoke('load-favorites'),
   checkPreviewFiles: () => ipcRenderer.invoke('check-preview-files'),
   generatePreviewFiles: () => ipcRenderer.invoke('generate-preview-files'),
+  checkStylePreview: ({ speakerName, styleName }) =>
+    ipcRenderer.invoke('check-style-preview', { speakerName, styleName }),
+  generateStylePreview: ({ speakerName, styleName, types }) =>
+    ipcRenderer.invoke('generate-style-preview', { speakerName, styleName, types }),
   getPreviewAssetPath: () => ipcRenderer.invoke('get-preview-asset-path'),
 });

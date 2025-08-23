@@ -378,6 +378,65 @@ ipcMain.handle('generate-preview-files', async (event) => {
   return true;
 });
 
+// 個別スタイルのプレビュー生成IPC
+ipcMain.handle('generate-style-preview', async (_event, { speakerName, styleName, types }) => {
+  try {
+    const speakers = await fetchCharacters();
+    if (!speakers) throw new Error('キャラクター一覧取得に失敗');
+    const speaker = speakers.find(s => s.name === speakerName);
+    if (!speaker) throw new Error(`スピーカーが見つかりません: ${speakerName}`);
+    const style = speaker.styles.find(st => st.name === styleName);
+    if (!style) throw new Error(`スタイルが見つかりません: ${styleName}`);
+
+    const speakerDir = path.join(PREVIEW_DIR, sanitizeFilename(speaker.name));
+    const styleDir = path.join(speakerDir, sanitizeFilename(style.name));
+    await ensureDir(styleDir);
+
+    const previewText = {
+      name: (name) => `${name}です。`,
+      test: () => 'テストです',
+      amenbo: () => 'あめんぼあかいなあいうえお',
+    };
+    const targetTypes = Array.isArray(types) && types.length ? types : ['name','test','amenbo'];
+    for (const t of targetTypes) {
+      const finalMp3Path = path.join(styleDir, `${t}.mp3`);
+      if (ffs.existsSync(finalMp3Path)) continue;
+      const text = previewText[t] ? previewText[t](speaker.name) : null;
+      if (!text) continue;
+      const audioQuery = await postRequest(`${VOICEVOX_API_URL}/audio_query?speaker=${style.id}&text=${encodeURIComponent(text)}`);
+      const wavBuffer = await postRequest(`${VOICEVOX_API_URL}/synthesis?speaker=${style.id}`, audioQuery, 'buffer');
+      const tempWavPath = path.join(styleDir, `temp_${Date.now()}.wav`);
+      await fs.writeFile(tempWavPath, wavBuffer);
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempWavPath).audioCodec('libmp3lame').on('error', reject).on('end', resolve).save(finalMp3Path);
+      });
+      await fs.unlink(tempWavPath);
+    }
+    return true;
+  } catch (e) {
+    console.error('generate-style-preview failed', e);
+    throw e;
+  }
+});
+
+// 個別スタイルのプレビュー有無を返すIPC
+ipcMain.handle('check-style-preview', async (_event, { speakerName, styleName }) => {
+  try {
+    const speakerDir = path.join(PREVIEW_DIR, sanitizeFilename(speakerName));
+    const styleDir = path.join(speakerDir, sanitizeFilename(styleName));
+    const exists = (file) => ffs.existsSync(path.join(styleDir, file));
+    const result = {
+      name: exists('name.mp3'),
+      test: exists('test.mp3'),
+      amenbo: exists('amenbo.mp3'),
+    };
+    return { ...result, all: result.name && result.test && result.amenbo };
+  } catch (e) {
+    console.error('check-style-preview failed', e);
+    return { name: false, test: false, amenbo: false, all: false };
+  }
+});
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,

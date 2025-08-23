@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// --- 共有ユーティリティ ---
+const sanitize = (name) => String(name).replace(/[\\/:*?"<>|]/g, '_');
+
 // --- キャラクターメタデータ ---
 const characterMeta = {
   '四国めたん': { gender: '女性', color: '#FF6F61', isTohoku: true },
@@ -340,6 +343,71 @@ function App() {
     }
   }; // ← セミコロンを忘れない
 
+  // 階層プレビュー用ヘルパー
+  const handlePreview2 = async (characterName, styleName, type) => {
+    try {
+      const basePath = await window.electronAPI.getPreviewAssetPath();
+      const fsPath = `${String(basePath).replace(/\\/g, '/')}/${sanitize(characterName)}/${sanitize(styleName)}/${type}.mp3`;
+      const audioPath = toFileUrl(fsPath);
+      if (previewAudioRef.current) {
+        previewAudioRef.current.src = audioPath;
+        await previewAudioRef.current.play();
+      }
+    } catch (e) {
+      console.error('プレビュー再生に失敗', e);
+      setStatus(`プレビューファイルが見つかりません: ${characterName}/${styleName}/${type}.mp3`);
+    }
+  };
+
+  // 生成済み管理（全3種揃っているか）
+  const [stylePreviewReady, setStylePreviewReady] = useState(new Set());
+  const statusKey = (speakerName, styleName) => `${speakerName}||${styleName}`;
+
+  const refreshStatusForSpeaker = async (char) => {
+    for (const style of char.styles) {
+      try {
+        const res = await window.electronAPI.checkStylePreview({ speakerName: char.name, styleName: style.name });
+        setStylePreviewReady((prev) => {
+          const next = new Set(prev);
+          const key = statusKey(char.name, style.name);
+          if (res && res.all) next.add(key); else next.delete(key);
+          return next;
+        });
+      } catch {}
+    }
+  };
+
+  const onExpandSpeaker = async (char) => {
+    const isExpanded = expandedSpeakers.has(char.speaker_uuid);
+    const next = new Set(expandedSpeakers);
+    if (isExpanded) next.delete(char.speaker_uuid); else next.add(char.speaker_uuid);
+    setExpandedSpeakers(next);
+    if (!isExpanded) {
+      await refreshStatusForSpeaker(char);
+    }
+  };
+
+  const handleGenerateStylePreview = async (characterName, styleName) => {
+    try {
+      setStatus(`${characterName}（${styleName}）のプレビューを生成中...`);
+      await window.electronAPI.generateStylePreview({ speakerName: characterName, styleName, types: ['name','test','amenbo'] });
+      // 生成後に状態更新
+      try {
+        const res = await window.electronAPI.checkStylePreview({ speakerName: characterName, styleName });
+        setStylePreviewReady((prev) => {
+          const next = new Set(prev);
+          const key = statusKey(characterName, styleName);
+          if (res && res.all) next.add(key); else next.delete(key);
+          return next;
+        });
+      } catch {}
+      setStatus(`${characterName}（${styleName}）のプレビュー生成が完了しました。`);
+    } catch (e) {
+      console.error('スタイルプレビュー生成に失敗', e);
+      setStatus(`エラー: スタイルプレビュー生成に失敗しました (${characterName}/${styleName})`);
+    }
+  };
+
   /**
    * 現在のモード（ノーマル/マルチスタイル）に応じたキャラクター一覧を描画する。
    */
@@ -364,7 +432,7 @@ function App() {
                 <div
                   className="d-flex justify-content-between align-items-center p-2"
                   style={headerStyle}
-                  onClick={() => toggleSpeakerExpansion(char.speaker_uuid)}
+                  onClick={() => onExpandSpeaker(char)}
                 >
                   <div className="d-flex align-items-center">
                     <span
@@ -394,11 +462,36 @@ function App() {
                     {char.styles.map((style) => {
                       const isSelected = selectedStyles.has(style.id);
                       return (
-                        <li key={style.id} className="list-group-item p-0" onClick={() => handleStyleSelection(style.id)}>
-                          <label className="d-block w-100 p-2" style={{ cursor: 'pointer' }}>
-                            <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
-                            {style.name}
-                          </label>
+                        <li key={style.id} className="list-group-item p-0">
+                          <div className="d-flex align-items-center justify-content-between p-2">
+                            <div
+                              className="d-flex align-items-center"
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => handleStyleSelection(style.id)}
+                            >
+                              <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
+                              <span className="me-2">{style.name}</span>
+                            </div>
+                            {(() => { const ready = stylePreviewReady.has(`${style.speakerName}||${style.name}`); return (
+                              <div className="d-flex align-items-center">
+                                <button
+                                  className="btn btn-sm btn-preview me-2"
+                                  onClick={(e) => { e.stopPropagation();
+                                    const types = ['amenbo','name','test'];
+                                    // 優先順に存在チェックして再生（存在チェックはIPC不要で試行再生でも良いが、ここでは直接amenboを試す）
+                                    handlePreview2(style.speakerName, style.name, 'amenbo');
+                                  }}
+                                  title="プレビュー再生"
+                                >▶</button>
+                                <button
+                                  className={`btn btn-sm ${ready ? 'btn-success' : 'btn-outline-secondary'}`}
+                                  title={ready ? '作成済み' : 'このスタイルのプレビューを作成'}
+                                  disabled={ready}
+                                  onClick={(e) => { e.stopPropagation(); handleGenerateStylePreview(style.speakerName, style.name); }}
+                                >{ready ? '✓' : '⟳'}</button>
+                              </div>
+                            ); })()}
+                          </div>
                         </li>
                       );
                     })}
@@ -447,7 +540,7 @@ function App() {
                     className="btn btn-sm btn-preview me-1"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePreview(char.name, 'name');
+                      handlePreview2(char.name, 'ノーマル', 'name');
                     }}
                     title={`${char.name}です。`}
                   >
@@ -457,7 +550,7 @@ function App() {
                     className="btn btn-sm btn-preview me-1"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePreview(char.name, 'test');
+                      handlePreview2(char.name, 'ノーマル', 'test');
                     }}
                     title="テストです"
                   >
@@ -467,7 +560,7 @@ function App() {
                     className="btn btn-sm btn-preview"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePreview(char.name, 'amenbo');
+                      handlePreview2(char.name, 'ノーマル', 'amenbo');
                     }}
                     title="あめんぼあかいなあいうえお"
                   >
