@@ -7,6 +7,11 @@ const ffmpeg = require('fluent-ffmpeg');
 const VOICEVOX_API_URL = 'http://localhost:50021';
 const isDev = !app.isPackaged;
 
+/**
+ * アセットの実ファイルパスを解決する（開発/本番対応）。
+ * @param {...string} subPaths 結合するサブパス
+ * @returns {string} 解決された絶対パス
+ */
 const getAssetPath = (...subPaths) => {
   return isDev
     ? path.join(__dirname, '../../', ...subPaths)
@@ -19,6 +24,10 @@ const PREVIEW_DIR = path.join(__dirname, '..', '..', 'preview');
 const FAVORITES_PATH = path.join(USER_DATA_PATH, 'favorites.json');
 
 // --- Helper Functions ---
+/**
+ * ディレクトリを再帰的に作成（既存時は何もしない）。
+ * @param {string} dir 作成対象のディレクトリパス
+ */
 const ensureDir = async (dir) => {
   try {
     await fs.mkdir(dir, { recursive: true });
@@ -27,6 +36,11 @@ const ensureDir = async (dir) => {
   }
 };
 
+/**
+ * 指定秒数の無音WAVファイルを生成する。
+ * @param {string} filePath 出力先ファイルパス（.wav）
+ * @param {number} durationSeconds 無音の長さ（秒）
+ */
 const createSilentWav = async (filePath, durationSeconds) => {
   const sampleRate = 24000;
   const bitDepth = 16;
@@ -55,6 +69,14 @@ const createSilentWav = async (filePath, durationSeconds) => {
   await fs.writeFile(filePath, buffer);
 };
 
+/**
+ * Electronの`net`を用いてPOSTリクエストを実行する。
+ * @template T
+ * @param {string} url 送信先URL
+ * @param {any} data JSONとして送信するボディ
+ * @param {('json'|'buffer')} [responseType='json'] レスポンスの型
+ * @returns {Promise<T|Buffer>} パース済みJSONまたはBuffer
+ */
 const postRequest = (url, data, responseType = 'json') => {
   return new Promise((resolve, reject) => {
     const request = net.request({ method: 'POST', url });
@@ -81,6 +103,12 @@ const postRequest = (url, data, responseType = 'json') => {
   });
 };
 
+/**
+ * Electronの`net`でGETし、JSONを取得する。
+ * @template T
+ * @param {string} url 取得先URL
+ * @returns {Promise<T>} パース済みJSON
+ */
 const getRequestJson = (url) => {
   return new Promise((resolve, reject) => {
     const request = net.request({ method: 'GET', url });

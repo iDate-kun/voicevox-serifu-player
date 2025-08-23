@@ -56,6 +56,12 @@ const toFileUrl = (p) => {
   return `file://${withDrive}`;
 };
 
+/**
+ * メインUIコンポーネント。
+ * - キャラクター・スタイルのフィルタ／選択
+ * - 音声生成のトリガーと進捗表示
+ * - プレビュー音声の再生
+ */
 function App() {
   // --- State管理 ---
   const [allCharacters, setAllCharacters] = useState([]);
@@ -164,6 +170,11 @@ function App() {
   }, [favorites]);
 
   // --- イベントハンドラ ---
+  /**
+   * 生成済みのプレビューファイル（name/test/amenbo）を選択して再生する。
+   * @param {string} characterName キャラクター名
+   * @param {('name'|'test'|'amenbo')} type プレビュー種別
+   */
   const handlePreview = async (characterName, type) => {
     const sanitize = (name) => name.replace(/[\/:*?"<>|]/g, '_');
 
@@ -190,6 +201,9 @@ function App() {
     }
   };
 
+  /**
+   * 未生成のプレビュー音声をまとめて生成する。
+   */
   const handleGeneratePreviews = async () => {
     setGeneratingPreviews(true);
     setStatus('プレビュー音声を生成中...');
@@ -205,6 +219,10 @@ function App() {
     }
   };
 
+  /**
+   * お気に入り（speaker_uuid単位）をトグルする。
+   * @param {string} speakerUuid スピーカーUUID
+   */
   const handleToggleFavorite = (speakerUuid) => {
     const newFavorites = new Set(favorites);
     if (newFavorites.has(speakerUuid)) {
@@ -215,6 +233,10 @@ function App() {
     setFavorites(newFavorites);
   };
 
+  /**
+   * スタイルIDを選択/解除する。
+   * @param {number} styleId VOICEVOXスタイルID
+   */
   const handleStyleSelection = (styleId) => {
     const newSelection = new Set(selectedStyles);
     if (newSelection.has(styleId)) {
@@ -225,6 +247,11 @@ function App() {
     setSelectedStyles(newSelection);
   };
 
+  /**
+   * 指定キャラクター配下の全スタイルを一括選択/解除する。
+   * @param {object} char キャラクター（styles配列含む）
+   * @param {boolean} shouldSelect 選択（true）/解除（false）
+   */
   const handleSelectAllStyles = (char, shouldSelect) => {
     const newSelection = new Set(selectedStyles);
     char.styles.forEach((style) => {
@@ -237,6 +264,10 @@ function App() {
     setSelectedStyles(newSelection);
   };
 
+  /**
+   * キャラクターのスタイル一覧の開閉を切り替える。
+   * @param {string} speakerUuid スピーカーUUID
+   */
   const toggleSpeakerExpansion = (speakerUuid) => {
     const newExpansion = new Set(expandedSpeakers);
     if (newExpansion.has(speakerUuid)) {
@@ -247,6 +278,9 @@ function App() {
     setExpandedSpeakers(newExpansion);
   };
 
+  /**
+   * 表示中のキャラクター（とスタイル）のみ全選択する。
+   */
   const handleSelectAllVisible = () => {
     let allVisibleStyleIds;
     if (isMultiStyleMode) {
@@ -260,10 +294,16 @@ function App() {
     setSelectedStyles(new Set(allVisibleStyleIds));
   };
 
+  /**
+   * すべての選択を解除する。
+   */
   const handleDeselectAll = () => {
     setSelectedStyles(new Set());
   };
 
+  /**
+   * 選択されたスタイルで音声を生成し、結果のMP3をプレイヤーにセットする。
+   */
   const handleGenerate = async () => {
     setLoading(true);
     setProgress(0);
@@ -299,6 +339,9 @@ function App() {
     }
   }; // ← セミコロンを忘れない
 
+  /**
+   * 現在のモード（ノーマル/マルチスタイル）に応じたキャラクター一覧を描画する。
+   */
   const renderCharacterList = () => {
     if (isMultiStyleMode) {
       // スタイル選択モード
