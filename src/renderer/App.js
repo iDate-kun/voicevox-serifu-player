@@ -185,7 +185,8 @@ function App() {
     };
 
     const text = previewTexts[type];
-    const fileName = `${sanitize(characterName)}_${sanitize(text.substring(0, 10))}.mp3`;
+    // メインプロセス側の生成規則と合わせ、全文をサニタイズしてファイル名化
+    const fileName = `${sanitize(characterName)}_${sanitize(text)}.mp3`;
 
     try {
       const basePath = await window.electronAPI.getPreviewAssetPath(); // Promise想定
