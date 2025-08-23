@@ -15,7 +15,7 @@ const getAssetPath = (...subPaths) => {
 
 const USER_DATA_PATH = app.getPath('userData');
 const OUTPUT_DIR = path.join(USER_DATA_PATH, 'output');
-const PREVIEW_DIR = getAssetPath('preview');
+const PREVIEW_DIR = path.join(__dirname, '..', '..', 'preview');
 const FAVORITES_PATH = path.join(USER_DATA_PATH, 'favorites.json');
 
 // --- Helper Functions ---

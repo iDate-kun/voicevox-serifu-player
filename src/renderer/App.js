@@ -400,34 +400,34 @@ function App() {
                 </div>
                 <div className="ms-auto pe-2">
                   <button
-                    className="btn btn-sm btn-outline-success me-1"
+                    className="btn btn-sm btn-preview me-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePreview(char.name, 'name');
                     }}
                     title={`${char.name}です。`}
                   >
-                    ▶ 名前
+                    ▶
                   </button>
                   <button
-                    className="btn btn-sm btn-outline-success me-1"
+                    className="btn btn-sm btn-preview me-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePreview(char.name, 'test');
                     }}
                     title="テストです"
                   >
-                    ▶ テスト
+                    ▶
                   </button>
                   <button
-                    className="btn btn-sm btn-outline成功"
+                    className="btn btn-sm btn-preview"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePreview(char.name, 'amenbo');
                     }}
                     title="あめんぼあかいなあいうえお"
                   >
-                    ▶ あめんぼ
+                    ▶
                   </button>
                 </div>
               </li>

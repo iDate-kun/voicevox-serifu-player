@@ -1,5 +1,3 @@
-/* --- Susan Kare Inspired Theme --- */
-
 /* --- Global Variables & Font --- */
 :root {
   --bg-color: #ffffff;
@@ -137,6 +135,17 @@ body {
   border: 1px solid var(--border-color) !important;
 }
 .btn-outline-secondary:hover {
+  background-color: var(--control-bg) !important;
+  color: var(--text-color) !important;
+}
+
+.btn-preview {
+  color: var(--text-color) !important;
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.btn-preview:hover {
   background-color: var(--control-bg) !important;
   color: var(--text-color) !important;
 }
