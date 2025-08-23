@@ -484,6 +484,16 @@ function App() {
                                   title="プレビュー再生"
                                 >▶</button>
                                 <button
+                                  className="btn btn-sm btn-preview me-2"
+                                  onClick={(e) => { e.stopPropagation(); handlePreview2(style.speakerName, style.name, 'name'); }}
+                                  title={`${style.speakerName}です。`}
+                                >▶</button>
+                                <button
+                                  className="btn btn-sm btn-preview me-2"
+                                  onClick={(e) => { e.stopPropagation(); handlePreview2(style.speakerName, style.name, 'test'); }}
+                                  title="テストです"
+                                >▶</button>
+                                <button
                                   className={`btn btn-sm ${ready ? 'btn-success' : 'btn-outline-secondary'}`}
                                   title={ready ? '作成済み' : 'このスタイルのプレビューを作成'}
                                   disabled={ready}
@@ -535,7 +545,64 @@ function App() {
                   <input className="form-check-input me-2" type="checkbox" checked={isSelected} readOnly />
                   {char.name} {char.isTohoku && ' (東北)'}
                 </div>
-                <div className="ms-auto pe-2">
+                <div
+                  className="ms-auto pe-2 d-flex align-items-center"
+                  onMouseEnter={() => {
+                    window.electronAPI
+                      .checkStylePreview({ speakerName: char.name, styleName: normalStyle.name })
+                      .then((res) => {
+                        setStylePreviewReady((prev) => {
+                          const next = new Set(prev);
+                          const key = `${char.name}||${normalStyle.name}`;
+                          if (res && res.all) next.add(key); else next.delete(key);
+                          return next;
+                        });
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  <button
+                    className="btn btn-sm btn-preview me-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview2(char.name, normalStyle.name, 'name');
+                    }}
+                    title={`${char.name}です。`}
+                  >
+                    ▶
+                  </button>
+                  <button
+                    className="btn btn-sm btn-preview me-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview2(char.name, normalStyle.name, 'test');
+                    }}
+                    title="テストです"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    className="btn btn-sm btn-preview me-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreview2(char.name, normalStyle.name, 'amenbo');
+                    }}
+                    title="あめんぼあかいなあいうえお"
+                  >
+                    ▶
+                  </button>
+                  {(() => { const key = `${char.name}||${normalStyle.name}`; const ready = stylePreviewReady.has(key); return (
+                    <button
+                      className={`btn btn-sm ${ready ? 'btn-success' : 'btn-outline-secondary'}`}
+                      title={ready ? '作成済み' : 'このスタイルのプレビューを作成'}
+                      disabled={ready}
+                      onClick={(e) => { e.stopPropagation(); handleGenerateStylePreview(char.name, normalStyle.name); }}
+                    >
+                      {ready ? '✓' : '⟳'}
+                    </button>
+                  ); })()}
+                </div>
+                <div className="ms-auto pe-2" style={{display:'none'}}>
                   <button
                     className="btn btn-sm btn-preview me-1"
                     onClick={(e) => {
