@@ -7,9 +7,6 @@
 
 <br>
 
-### 🎥 使い方動画
-[![使い方の動画](./VSP解説動画サムネイル.jpg)](https://www.nicovideo.jp/watch/sm45311403)
-<br>
 
 ## 📥 ダウンロード (Download)
 

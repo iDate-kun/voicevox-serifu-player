@@ -1,6 +1,6 @@
 {
-  "name": "voicevox-serihu",
-  "version": "1.0.0",
+  "name": "voicevox-serihu-player",
+  "version": "1.0.1",
   "description": "A desktop app to generate and play voice lines using multiple Voicevox characters.",
   "main": "src/main/main.js",
   "scripts": {
